@@ -1,7 +1,23 @@
-<html>
+<!DOCTYPE html>
   <head>
+      <title>视频页</title>
+    <script>
+    function kill() {
+       window.stop();
+       var temp = document.createElement("form");
+       temp.action = "/kill";
+       temp.method = "POST";
+       temp.style.display = "none";
+       temp.submit();
+    }
+</script>
   </head>
+
   <body>
-    <img src="{{ url_for('constart') }}">
+  <center>
+        <img src="{{url_for('constart')}}" width="30%" id="image"><br>
+        <input type="button" value="kill" onclick="kill()">
+  </center>
   </body>
 </html>
+

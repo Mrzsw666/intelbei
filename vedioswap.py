@@ -10,8 +10,10 @@ import zlib
 class GetVideo(threading.Thread):
     def __init__(self, port, version):
         threading.Thread.__init__(self)
-        self.setDaemon(True)
+        # self.setDaemon(True)
         self.address = ('', port)
+        self.conn = socket()
+        self.addr = ''
         if version == 4:
             self.sock = socket(AF_INET, SOCK_STREAM)
         else:
@@ -21,34 +23,27 @@ class GetVideo(threading.Thread):
         self.sock.close()
 
     def run(self):
-        print("Video receiver starting...")
+        print("Video receiver is waiting for connection")
         self.sock.bind(self.address)
         self.sock.listen(1)
-        conn, addr = self.sock.accept()
-        print("Video receiver has sterted!")
+        self.conn, self.addr = self.sock.accept()
+        print("Video receiver has connect!")
         frame = "".encode("utf-8")
         buff_size = struct.calcsize("L")
-        # cv2.namedWindow('Remote', cv2.WINDOW_NORMAL)
         while True:
             while len(frame) < buff_size:
-                frame += conn.recv(81920)
+                frame += self.conn.recv(81920)
             packed_size = frame[:buff_size]
             frame = frame[buff_size:]
             msg_size = struct.unpack("L", packed_size)[0]
-            frame += conn.recv(msg_size)
+            frame += self.conn.recv(msg_size)
             while len(frame) < msg_size:
-                frame += conn.recv(81920)
+                frame += self.conn.recv(81920)
             fframe_data = frame[:msg_size]
             frame = frame[msg_size:]
-            #frame_data = zlib.decompress(fframe_data)
-            #framee = pickle.loads(frame_data)
-            print(len(fframe_data))
-            '''
-            cv2.imshow('Remote', framee)
-            if cv2.waitKey(1) & 0xFF == 27:
-                break
-            '''
-            yield (b'--frame\r\n'b'Content-Type: image/jpeg\r\n\r\n' + fframe_data + b'\r\n')
+            frame_data = zlib.decompress(fframe_data)
+            framee = pickle.loads(frame_data)
+            yield(b'--frame\r\n'b'Content-Type: image/jpeg\r\n\r\n' + framee + b'\r\n')
 
 
 class SendVideo(threading.Thread):
@@ -73,27 +68,28 @@ class SendVideo(threading.Thread):
         self.sock.close()
         self.cap.release()
 
-    def run(self):
+    def connect(self):
         print("Video sender is starting...")
-        while True:
-            try:
-                self.sock.connect(self.address)
-                break
-            except:
-                time.sleep(5)
-                continue
+        try:
+            self.sock.settimeout(8)
+            self.sock.connect(self.address)
+            self.sock.settimeout(None)
+        except timeout:
+            return 'timeout'
         print("Video sender has started!")
+        return 'ok'
+
+    def run(self):
+        self.sock.connect(self.address)
         while self.cap.isOpened():
             ret, frame = self.cap.read()
             rframe = cv2.resize(frame, (0, 0), fx=self.fx, fy=self.fx)
             bframe = cv2.imencode('.jpg', rframe)[1].tobytes()
-            #data = pickle.dumps(bframe)
-            #dataa = zlib.compress(data, zlib.Z_BEST_COMPRESSION)
-            print(len(bframe))
+            data = pickle.dumps(bframe)
+            dataa = zlib.compress(data, zlib.Z_BEST_COMPRESSION)
             try:
-                self.sock.sendall(struct.pack("L", len(bframe))+bframe)
+                self.sock.sendall(struct.pack("L", len(dataa)) + dataa)
             except:
                 break
             for i in range(self.interval):
                 self.cap.read()
-
